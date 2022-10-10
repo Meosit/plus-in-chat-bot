@@ -11,6 +11,7 @@ This bot is designed for [GCP Cloud Functions](https://cloud.google.com/function
 
 * Runtime: `Python 3.10`
 * Allow unauthenticated access
+* Memory: `128M`
 
 ### Environment variables required:
 
