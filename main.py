@@ -52,15 +52,16 @@ def main(request):
                     now = datetime.datetime.now()
                     rating_changed_timedelta = datetime.timedelta(seconds=group["rating_change_timeout"])
                     action_id = str(action_user["id"])
-                    action_name = f"{action_user['first_name']} {str(action_user.get('last_name', '') or '')}"
+                    action_name = f"{action_user['first_name']} {str(action_user.get('last_name', '') or '')}".strip()
                     action_username = action_user.get('username', None)
+                    now_string = now.strftime("%Y-%m-%d %H:%M:%S")
                     action_person = group["users"].get(action_id, {
                         "name": action_name.strip(),
                         "username": action_username,
                         "actions": 0,
-                        "last_action": str(now - rating_changed_timedelta),
+                        "last_action": (now - rating_changed_timedelta).strftime("%Y-%m-%d %H:%M:%S"),
                         "rating": 0,
-                        "rating_changed": str(now)
+                        "rating_changed": now_string
                     })
                     target_id = str(target_user["id"])
                     target_name = f"{target_user['first_name']} {str(target_user.get('last_name', '') or '')}".strip()
@@ -69,17 +70,17 @@ def main(request):
                         "name": target_name,
                         "username": target_username,
                         "actions": 0,
-                        "last_action": str(now),
+                        "last_action": now_string,
                         "rating": 0,
-                        "rating_changed": str(now)
+                        "rating_changed": now_string
                     })
                     if (now - datetime.datetime.fromisoformat(action_person["last_action"])) >= rating_changed_timedelta:
                         action_person["actions"] = action_person["actions"] + 1
-                        action_person["last_action"] = str(now)
+                        action_person["last_action"] = now_string
                         action_person["name"] = action_name
                         action_person["username"] = action_username
                         target_person["rating"] = target_person["rating"] + rating_delta
-                        target_person["rating_changed"] = str(now)
+                        target_person["rating_changed"] = now_string
                         target_person["name"] = target_name
                         target_person["username"] = target_username
                         group["users"][action_id] = action_person
