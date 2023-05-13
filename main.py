@@ -31,7 +31,7 @@ def main(request):
                 command = text[command_entity["offset"]:command_entity["offset"] + command_entity["length"]]
                 print(f"Handling '{command}' command for ${chat['id']}")
                 handler = handlers.from_command(command)
-                handler(chat, user, text.lstrip(command))
+                handler(chat, user, text.lstrip(command), message.get("reply_to_message", None))
             elif "reply_to_message" in message \
                     and chat["type"] in ("group", "supergroup") \
                     and message["reply_to_message"]["from"]["id"] != user["id"] \
@@ -61,7 +61,9 @@ def main(request):
                         "actions": 0,
                         "last_action": (now - rating_changed_timedelta).strftime("%Y-%m-%d %H:%M:%S"),
                         "rating": 0,
-                        "rating_changed": now_string
+                        "rating_changed": now_string,
+                        "weight_changed": now_string,
+                        "weights": [],
                     })
                     target_id = str(target_user["id"])
                     target_name = f"{target_user['first_name']} {str(target_user.get('last_name', '') or '')}".strip()
@@ -72,7 +74,8 @@ def main(request):
                         "actions": 0,
                         "last_action": now_string,
                         "rating": 0,
-                        "rating_changed": now_string
+                        "rating_changed": now_string,
+                        "weights": [],
                     })
                     if (now - datetime.datetime.fromisoformat(action_person["last_action"])) >= rating_changed_timedelta:
                         action_person["actions"] = action_person["actions"] + 1
@@ -125,6 +128,12 @@ def escape_markdown(string):
 def telegram_send_text(user_id, markdown):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     data = {"chat_id": int(user_id), "parse_mode": "Markdown", "text": trim_to_max_length(markdown)}
+    requests.post(url, json=data)
+
+
+def telegram_update_text(user_id, message_id, markdown):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    data = {"chat_id": int(user_id), "message_id": int(message_id), "parse_mode": "Markdown", "text": trim_to_max_length(markdown)}
     requests.post(url, json=data)
 
 

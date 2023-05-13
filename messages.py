@@ -1,5 +1,7 @@
 
 TOP_GROUP = """Top for group *[name]*:\n[list]"""
+WEIGHT_GROUP_PREFIX = """Weight for group"""
+WEIGHT_GROUP = f"""{WEIGHT_GROUP_PREFIX} *[name]* on [date]:\n[list]"""
 
 HELP_GROUP = """This bot allows to count rating of people within a group.
 
@@ -8,6 +10,8 @@ To decrease rating, message should [mode]: [decrease]
 
 Commands for everyone:
 /rating - Show top 10 users with highest rating
+/weight <value> - Record current weight
+/weight\\_rating - Show current weights of group users
 /help - show this help
 
 Commands for group creator:
