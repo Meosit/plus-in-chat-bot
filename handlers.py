@@ -40,41 +40,44 @@ def weight(chat, user, payload, reply_to_message):
         main.telegram_send_text(chat_id, messages.HELP_USER)
         return
 
-    user_id = str(user["id"])
     payload = payload.strip().replace(" ", "").replace(",", ".")
     if payload == "":
-        main.telegram_send_text(chat_id, "Weight is not provided")
-    elif re.fullmatch(r"\d+(\.\d+)?", payload):
-        weight_payload = round(float(payload), 1)
-        group = store.get_group_or_new(chat_id, chat["title"])
-        user_name = f"{user['first_name']} {str(user.get('last_name', '') or '')}".strip()
-        user_username = user.get('username', None)
-        now = datetime.datetime.now()
-        now_string = now.strftime("%Y-%m-%d %H:%M:%S")
-        rating_changed_timedelta = datetime.timedelta(seconds=group["rating_change_timeout"])
-        user = group["users"].get(user_id, {
-            "name": user_name.strip(),
-            "username": user_username,
-            "actions": 0,
-            "last_action": (now - rating_changed_timedelta).strftime("%Y-%m-%d %H:%M:%S"),
-            "rating": 0,
-            "rating_changed": now_string,
-            "weights": []
-        })
-        user["weights"] = [] if "weights" not in user else user["weights"]
-        if (now - datetime.datetime.fromisoformat(user["last_action"])) >= rating_changed_timedelta:
-            user["name"] = user_name
-            user["username"] = user_username
-            user["last_action"] = now_string
-            user["weights"].insert(0, {"d": now_string, "v": weight_payload})
-            if len(user["weights"]) >= 20:
-                user["weights"].pop()
-            message = user_weight_message(user)
-            group["users"][user_id] = user
-            store.set_group(chat_id, group)
-            main.telegram_send_text(chat_id, f"Saved: {message}")
-    else:
-        main.telegram_send_text(chat_id, "Weight is not provided")
+        main.telegram_send_text(chat_id, "Value is not provided")
+    if re.fullmatch(r"\d+(\.\d+)?", payload) is None:
+        main.telegram_send_text(chat_id, "Value is invalid, must be a number")
+
+    group = store.get_group_or_new(chat_id, chat["title"])
+    user_name = f"{user['first_name']} {str(user.get('last_name', '') or '')}".strip()
+    user_username = user.get('username', None)
+    now = datetime.datetime.now()
+    now_string = now.strftime("%Y-%m-%d %H:%M:%S")
+    rating_changed_timedelta = datetime.timedelta(seconds=group["rating_change_timeout"])
+    user_id = str(user["id"])
+    user = group["users"].get(user_id, {
+        "name": user_name,
+        "username": user_username,
+        "actions": 0,
+        "last_action": (now - rating_changed_timedelta).strftime("%Y-%m-%d %H:%M:%S"),
+        "rating": 0,
+        "rating_changed": now_string,
+        "weights": []
+    })
+    if (now - datetime.datetime.fromisoformat(user["last_action"])) < rating_changed_timedelta:
+        return
+    user["name"] = user_name
+    user["username"] = user_username
+    user["last_action"] = now_string
+    user["weights"] = [] if "weights" not in user else user["weights"]
+    user["weights"].insert(0, {"d": now_string, "v": round(float(payload), 1)})
+    if len(user["weights"]) >= 20:
+        user["weights"].pop()
+    message = user_weight_message(user)
+    group["users"][user_id] = user
+    store.set_group(chat_id, group)
+    main.telegram_send_text(chat_id, f"Saved: {message}")
+    if reply_to_message is not None and reply_to_message["from"]["is_bot"] \
+            and reply_to_message["text"].startswith(messages.WEIGHT_GROUP_PREFIX):
+        weight_rating(chat, user, payload, reply_to_message)
 
 
 def user_weight_message(user):
@@ -109,8 +112,7 @@ def weight_rating(chat, user, payload, reply_to_message):
             .replace("[date]", datetime.datetime.now().strftime("%Y-%m-%d"))\
             .replace("[list]", list_rating)
         if reply_to_message is not None and reply_to_message["from"]["is_bot"] \
-                and reply_to_message["text"].startswith(messages.WEIGHT_GROUP_PREFIX) \
-                and (str(user["id"]) == CREATOR_ID or main.telegram_chat_role(chat_id, user["id"]) == "creator"):
+                and reply_to_message["text"].startswith(messages.WEIGHT_GROUP_PREFIX):
             main.telegram_update_text(chat_id, reply_to_message["message_id"], message)
         else:
             main.telegram_send_text(chat_id, message)

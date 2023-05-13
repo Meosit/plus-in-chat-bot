@@ -56,13 +56,12 @@ def main(request):
                     action_username = action_user.get('username', None)
                     now_string = now.strftime("%Y-%m-%d %H:%M:%S")
                     action_person = group["users"].get(action_id, {
-                        "name": action_name.strip(),
+                        "name": action_name,
                         "username": action_username,
                         "actions": 0,
                         "last_action": (now - rating_changed_timedelta).strftime("%Y-%m-%d %H:%M:%S"),
                         "rating": 0,
                         "rating_changed": now_string,
-                        "weight_changed": now_string,
                         "weights": [],
                     })
                     target_id = str(target_user["id"])
@@ -132,7 +131,7 @@ def telegram_send_text(user_id, markdown):
 
 
 def telegram_update_text(user_id, message_id, markdown):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{TOKEN}/editMessageText"
     data = {"chat_id": int(user_id), "message_id": int(message_id), "parse_mode": "Markdown", "text": trim_to_max_length(markdown)}
     requests.post(url, json=data)
 

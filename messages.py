@@ -10,8 +10,8 @@ To decrease rating, message should [mode]: [decrease]
 
 Commands for everyone:
 /rating - Show top 10 users with highest rating
-/weight <value> - Record current weight
-/weight\\_rating - Show current weights of group users
+/weight <value> - Record current weight, if this a reply to existing /weight\\_rating message, then it will be updated as well 
+/weight\\_rating - Show current weights of group users, if this a reply to existing /weight\\_rating message, then it will be updated instead of new one
 /help - show this help
 
 Commands for group creator:
