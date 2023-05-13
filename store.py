@@ -14,7 +14,6 @@ def get_group_or_new(group_id, title):
         return snapshot.to_dict()
     else:
         new = {
-            "id": group_id,
             "name": title,
             "rating_change_timeout": 10,
             "trigger_by_prefix": True,
@@ -22,7 +21,7 @@ def get_group_or_new(group_id, title):
             "decrease_triggers": ["-", "minus", "минус", "кринж", "cringe"],
             "users": {}
         }
-        db.collection(collection_id).document(group_id).set(new)
+        db.collection(collection_id).document(str(group_id)).set(new)
         return new
 
 
