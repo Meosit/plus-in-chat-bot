@@ -1,6 +1,8 @@
 # Plus In Chat Bot
 
 This is a simple telegram bot which allows counting user statistics within specific group based on message replies.
+As an additional feature, allows to track and share body weight within the group.
+Not supposed to run in large groups
 
 ## Deployment
 

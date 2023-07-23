@@ -34,17 +34,19 @@ def help_command(chat, user, payload, reply_to_message):
         main.telegram_send_text(chat_id, messages.HELP_USER)
 
 
-def weight(chat, user, payload, reply_to_message):
+def update_float_value(chat, user, payload, update_user_callable):
     chat_id = str(chat["id"])
     if chat["type"] == "private":
         main.telegram_send_text(chat_id, messages.HELP_USER)
-        return
+        return user
 
     payload = payload.strip().replace(" ", "").replace(",", ".")
     if payload == "":
         main.telegram_send_text(chat_id, "Value is not provided")
+        return user
     if re.fullmatch(r"\d+(\.\d+)?", payload) is None:
         main.telegram_send_text(chat_id, "Value is invalid, must be a number")
+        return user
 
     group = store.get_group_or_new(chat_id, chat["title"])
     user_name = f"{user['first_name']} {str(user.get('last_name', '') or '')}".strip()
@@ -60,42 +62,104 @@ def weight(chat, user, payload, reply_to_message):
         "last_action": (now - rating_changed_timedelta).strftime("%Y-%m-%d %H:%M:%S"),
         "rating": 0,
         "rating_changed": now_string,
-        "weights": []
+        "weights": [],
+        "weight_info": {
+            "initial": {"d": now_string, "v": round(float(payload), 1)}
+        }
     })
     if (now - datetime.datetime.fromisoformat(user["last_action"])) < rating_changed_timedelta:
         return
     user["name"] = user_name
     user["username"] = user_username
     user["last_action"] = now_string
-    user["weights"] = [] if "weights" not in user else user["weights"]
-    user["weights"].insert(0, {"d": now_string, "v": round(float(payload), 1)})
-    if len(user["weights"]) >= 20:
-        user["weights"].pop()
-    message = user_weight_message(user)
+
+    update_user_callable(user, float(payload), now_string)
+
     group["users"][user_id] = user
     store.set_group(chat_id, group)
-    main.telegram_send_text(chat_id, f"Saved: {message}")
+    return user
+
+
+def height(chat, user, payload, reply_to_message):
+    def update_user(created_user, float_payload, now_string):
+        created_user["weight_info"] = {} if "weight_info" not in created_user else created_user["weight_info"]
+        created_user["weight_info"]["height"] = round(float_payload)
+
+    update_float_value(chat, user, payload, update_user)
+    main.telegram_send_text(str(chat["id"]), f"Saved: now height is {round(float(payload))}")
+
+
+def weight_init(chat, user, payload, reply_to_message):
+    def update_user(created_user, float_payload, now_string):
+        weight_record = {"d": now_string, "v": round(float_payload, 1)}
+        created_user["weight_info"] = {} if "weight_info" not in created_user else created_user["weight_info"]
+        created_user["weight_info"]["initial"] = weight_record
+        created_user["weights"] = [] if "weights" not in created_user else created_user["weights"]
+        created_user["weights"].insert(0, weight_record)
+        if len(created_user["weights"]) >= 20:
+            created_user["weights"].pop()
+
+    user = update_float_value(chat, user, payload, update_user)
+    message = user_weight_message(user)
+    main.telegram_send_text(str(chat["id"]), f"Weight tracking reset: {message}")
     if reply_to_message is not None and reply_to_message["from"]["is_bot"] \
             and reply_to_message["text"].startswith(messages.WEIGHT_GROUP_PREFIX):
         weight_rating(chat, user, payload, reply_to_message)
 
 
+def weight(chat, user, payload, reply_to_message):
+    def update_user(created_user, float_payload, now_string):
+        weight_record = {"d": now_string, "v": round(float_payload, 1)}
+        if "weight_info" not in created_user:
+            created_user["weight_info"] = {}
+        if "initial" not in created_user["weight_info"]:
+            created_user["weight_info"]["initial"] = weight_record
+        created_user["weights"] = [] if "weights" not in created_user else created_user["weights"]
+        created_user["weights"].insert(0, weight_record)
+        if len(created_user["weights"]) >= 20:
+            created_user["weights"].pop()
+
+    user = update_float_value(chat, user, payload, update_user)
+    message = user_weight_message(user)
+    main.telegram_send_text(str(chat["id"]), f"Saved: {message}")
+    if reply_to_message is not None and reply_to_message["from"]["is_bot"] \
+            and reply_to_message["text"].startswith(messages.WEIGHT_GROUP_PREFIX):
+        weight_rating(chat, user, payload, reply_to_message)
+
+
+# Mi ⚖️ 83.5 (BMI 25.4 ✅)
+# Last measurement: 🌭 +0.4 in 4d
+# Since beginning: 💪 -10.4 in 15d
 def user_weight_message(user):
     current_weight_object = user["weights"][0]
     current_datetime = datetime.datetime.strptime(current_weight_object["d"], "%Y-%m-%d %H:%M:%S")
     current_weight = current_weight_object["v"]
-    previous_weight_object = user["weights"][1] if len(user["weights"]) >= 2 else None
-    if previous_weight_object is not None:
-        previous_datetime = datetime.datetime.strptime(previous_weight_object["d"], "%Y-%m-%d %H:%M:%S")
-        previous_weight = previous_weight_object["v"]
+
+    if "weight_info" in user and "height" in user["weight_info"]:
+        current_height = (user["weight_info"]["height"] / 100.0)
+        bmi = round(current_weight / (current_height * current_height), 1)
+        icon = "🍩" if 25.0 <= bmi < 40.0 else ("⚠️" if bmi >= 40.0 else "✅")
+        bmi_text = f" (BMI `{bmi}` {icon})"
+    else:
+        bmi_text = ""
+
+    def create_delta_label(weight_object, intro):
+        if weight_object is None:
+            return f""
+        previous_datetime = datetime.datetime.strptime(weight_object["d"], "%Y-%m-%d %H:%M:%S")
+        previous_weight = weight_object["v"]
         after = (current_datetime.date() - previous_datetime.date()).days
         delta = current_weight - previous_weight
         delta_text = '{:+.1f}'.format(delta)
-        icon = "🌭" if delta > 0 else "💪"
-        delta_label = f"({icon} `{delta_text}` in {after}d)"
-    else:
-        delta_label = f""
-    message = f"*{main.escape_markdown(user['name'])}* ⚖️ `{current_weight}` {delta_label}"
+        delta_icon = "🌭" if delta > 0 else "💪"
+        return f"\n> {intro}: {delta_icon} `{delta_text}` in {after}d"
+
+    previous_weight_object = user["weights"][1] if len(user["weights"]) >= 2 else None
+    previous_delta_label = create_delta_label(previous_weight_object, "Last measurement")
+
+    initial_weight_object = user["weight_info"]["initial"] if "weight_info" in user and "initial" in user["weight_info"] else None
+    initial_weight_object = create_delta_label(initial_weight_object, "Since beginning")
+    message = f"*{main.escape_markdown(user['name'])}* ⚖️ `{current_weight}`{bmi_text}{previous_delta_label}{initial_weight_object}"
     return message
 
 
@@ -197,7 +261,9 @@ HANDLERS = {
     "/help": help_command,
     "/rating": rating,
     "/timeout": timeout,
+    "/height": height,
     "/weight": weight,
+    "/weight_init": weight_init,
     "/weight_rating": weight_rating,
     "/set_increase_trigger": set_increase_trigger,
     "/set_decrease_trigger": set_decrease_trigger,
