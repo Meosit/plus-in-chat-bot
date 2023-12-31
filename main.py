@@ -1,4 +1,5 @@
 import datetime
+import json
 import os
 import sys
 import traceback
@@ -20,6 +21,9 @@ def main(request):
         log_error_with_notification("Failed to parse request")
         return "OK", 200
     try:
+        print(f"Received update types: {', '.join(update.keys())}")
+        if "message_reaction" in update or "message_reaction_count" in update:
+            telegram_send_text(int(CREATOR_ID), f"```json\n{escape_markdown(json.dumps(update['message_reaction'], indent=2))}\nMSG:{'message' in update}\n```")
         if "message" in update and "text" in update["message"] and "from" in update["message"]:
             message = update["message"]
             text = message["text"]
@@ -31,7 +35,7 @@ def main(request):
                 command = text[command_entity["offset"]:command_entity["offset"] + command_entity["length"]]
                 print(f"Handling '{command}' command for ${chat['id']}")
                 handler = handlers.from_command(command)
-                handler(chat, user, text.lstrip(command), message.get("reply_to_message", None))
+                handler(chat, user, text.lstrip(command))
             elif "reply_to_message" in message \
                     and chat["type"] in ("group", "supergroup") \
                     and message["reply_to_message"]["from"]["id"] != user["id"] \

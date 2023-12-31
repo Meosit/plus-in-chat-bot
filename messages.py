@@ -1,7 +1,6 @@
 
 TOP_GROUP = """Top for group *[name]*:\n[list]"""
-WEIGHT_GROUP_PREFIX = """Weight for group"""
-WEIGHT_GROUP = f"""{WEIGHT_GROUP_PREFIX} *[name]* on [date]:\n[list]"""
+WEIGHT_GROUP = f"""Weight for group *[name]* on [date]:\n[list]"""
 
 HELP_GROUP = """This bot allows to count rating of people within a group.
 

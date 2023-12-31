@@ -9,7 +9,7 @@ import store
 CREATOR_ID = os.getenv("CREATOR_ID")
 
 
-def trigger_by_prefix(chat, user, payload, reply_to_message):
+def trigger_by_prefix(chat, user, payload):
     if chat["type"] in ("group", "supergroup"):
         group_id = chat["id"]
         if str(user["id"]) == CREATOR_ID or main.telegram_chat_role(chat["id"], user["id"]) == "creator":
@@ -19,7 +19,7 @@ def trigger_by_prefix(chat, user, payload, reply_to_message):
             main.telegram_send_text(group_id, "Updated")
 
 
-def help_command(chat, user, payload, reply_to_message):
+def help_command(chat, user, payload):
     chat_id = str(chat["id"])
     if chat["type"] in ("group", "supergroup"):
         group = store.get_group_or_new(chat_id, chat["title"])
@@ -38,15 +38,15 @@ def update_float_value(chat, user, payload, update_user_callable):
     chat_id = str(chat["id"])
     if chat["type"] == "private":
         main.telegram_send_text(chat_id, messages.HELP_USER)
-        return user
+        return None
 
     payload = payload.strip().replace(" ", "").replace(",", ".")
     if payload == "":
         main.telegram_send_text(chat_id, "Value is not provided")
-        return user
+        return None
     if re.fullmatch(r"\d+(\.\d+)?", payload) is None:
         main.telegram_send_text(chat_id, "Value is invalid, must be a number")
-        return user
+        return None
 
     group = store.get_group_or_new(chat_id, chat["title"])
     user_name = f"{user['first_name']} {str(user.get('last_name', '') or '')}".strip()
@@ -68,7 +68,7 @@ def update_float_value(chat, user, payload, update_user_callable):
         }
     })
     if (now - datetime.datetime.fromisoformat(user["last_action"])) < rating_changed_timedelta:
-        return
+        return None
     user["name"] = user_name
     user["username"] = user_username
     user["last_action"] = now_string
@@ -80,16 +80,17 @@ def update_float_value(chat, user, payload, update_user_callable):
     return user
 
 
-def height(chat, user, payload, reply_to_message):
+def height(chat, user, payload):
     def update_user(created_user, float_payload, now_string):
         created_user["weight_info"] = {} if "weight_info" not in created_user else created_user["weight_info"]
         created_user["weight_info"]["height"] = round(float_payload)
 
-    update_float_value(chat, user, payload, update_user)
-    main.telegram_send_text(str(chat["id"]), f"Saved: now height is {round(float(payload))}")
+    user = update_float_value(chat, user, payload, update_user)
+    if user:
+        main.telegram_send_text(str(chat["id"]), f"Saved: now height is {round(float(payload))}")
 
 
-def weight_init(chat, user, payload, reply_to_message):
+def weight_init(chat, user, payload):
     def update_user(created_user, float_payload, now_string):
         weight_record = {"d": now_string, "v": round(float_payload, 1)}
         created_user["weight_info"] = {} if "weight_info" not in created_user else created_user["weight_info"]
@@ -100,14 +101,12 @@ def weight_init(chat, user, payload, reply_to_message):
             created_user["weights"].pop()
 
     user = update_float_value(chat, user, payload, update_user)
-    message = user_weight_message(user)
-    main.telegram_send_text(str(chat["id"]), f"Weight tracking reset: {message}")
-    if reply_to_message is not None and reply_to_message["from"]["is_bot"] \
-            and reply_to_message["text"].startswith(messages.WEIGHT_GROUP_PREFIX):
-        weight_rating(chat, user, payload, reply_to_message)
+    if user:
+        message = __user_weight_message(user)
+        main.telegram_send_text(str(chat["id"]), f"Weight tracking reset: {message}")
 
 
-def weight(chat, user, payload, reply_to_message):
+def weight(chat, user, payload):
     def update_user(created_user, float_payload, now_string):
         weight_record = {"d": now_string, "v": round(float_payload, 1)}
         if "weight_info" not in created_user:
@@ -115,23 +114,24 @@ def weight(chat, user, payload, reply_to_message):
         if "initial" not in created_user["weight_info"]:
             created_user["weight_info"]["initial"] = weight_record
         created_user["weights"] = [] if "weights" not in created_user else created_user["weights"]
+        if len(created_user["weights"]) > 0 and created_user["weights"][0]["d"][0:10] == now_string[0:10]:
+            created_user["weights"].pop(0)
         created_user["weights"].insert(0, weight_record)
         if len(created_user["weights"]) >= 20:
             created_user["weights"].pop()
 
     user = update_float_value(chat, user, payload, update_user)
-    message = user_weight_message(user)
-    main.telegram_send_text(str(chat["id"]), f"Saved: {message}")
-    if reply_to_message is not None and reply_to_message["from"]["is_bot"] \
-            and reply_to_message["text"].startswith(messages.WEIGHT_GROUP_PREFIX):
-        weight_rating(chat, user, payload, reply_to_message)
+    if user:
+        message = __user_weight_message(user)
+        main.telegram_send_text(str(chat["id"]), f"Saved: {message}")
 
 
 # Mi ⚖️ 83.5 (BMI 25.4 ✅)
 # Last measurement: 🌭 +0.4 in 4d
 # Since beginning: 💪 -10.4 in 15d
-def user_weight_message(user):
-    current_weight_object = user["weights"][0]
+def __user_weight_message(user):
+    weights = user["weights"]
+    current_weight_object = weights[0]
     current_datetime = datetime.datetime.strptime(current_weight_object["d"], "%Y-%m-%d %H:%M:%S")
     current_weight = current_weight_object["v"]
 
@@ -163,11 +163,11 @@ def user_weight_message(user):
     return message
 
 
-def weight_rating(chat, user, payload, reply_to_message):
+def weight_rating(chat, user, payload):
     chat_id = str(chat["id"])
     if chat["type"] in ("group", "supergroup"):
         group = store.get_group_or_new(chat_id, chat["title"])
-        weights = list(map(lambda u: user_weight_message(u), filter(lambda u: "weights" in u and len(u["weights"]) > 0, group["users"].values())))
+        weights = list(map(lambda u: __user_weight_message(u), filter(lambda u: "weights" in u and len(u["weights"]) > 0, group["users"].values())))
         list_rating = "No one have any weight" if len(weights) == 0 \
             else "\n".join(f"- {it}"
                            for it in weights)
@@ -175,14 +175,10 @@ def weight_rating(chat, user, payload, reply_to_message):
             .replace("[name]", main.escape_markdown(chat["title"]))\
             .replace("[date]", datetime.datetime.now().strftime("%Y-%m-%d"))\
             .replace("[list]", list_rating)
-        if reply_to_message is not None and reply_to_message["from"]["is_bot"] \
-                and reply_to_message["text"].startswith(messages.WEIGHT_GROUP_PREFIX):
-            main.telegram_update_text(chat_id, reply_to_message["message_id"], message)
-        else:
-            main.telegram_send_text(chat_id, message)
+        main.telegram_send_text(chat_id, message)
 
 
-def rating(chat, user, payload, reply_to_message):
+def rating(chat, user, payload):
     chat_id = str(chat["id"])
     if chat["type"] in ("group", "supergroup"):
         group = store.get_group_or_new(chat_id, chat["title"])
@@ -196,7 +192,7 @@ def rating(chat, user, payload, reply_to_message):
         main.telegram_send_text(chat_id, message)
 
 
-def set_decrease_trigger(chat, user, payload, reply_to_message):
+def set_decrease_trigger(chat, user, payload):
     group_id = chat["id"]
     if chat["type"] in ("group", "supergroup") and (str(user["id"]) == CREATOR_ID or main.telegram_chat_role(group_id, user["id"]) == "creator"):
         payload = payload.strip().lower().replace("*", "").replace("\\", "").replace("[", "").replace("`", "")
@@ -216,7 +212,7 @@ def set_decrease_trigger(chat, user, payload, reply_to_message):
             main.telegram_send_text(group_id, "Trigger text cannot be more than 30 symbols")
 
 
-def set_increase_trigger(chat, user, payload, reply_to_message):
+def set_increase_trigger(chat, user, payload):
     group_id = chat["id"]
     if chat["type"] in ("group", "supergroup") and (str(user["id"]) == CREATOR_ID or main.telegram_chat_role(group_id, user["id"]) == "creator"):
         payload = payload.strip().lower().replace("*", "").replace("\\", "").replace("[", "").replace("`", "")
@@ -236,7 +232,7 @@ def set_increase_trigger(chat, user, payload, reply_to_message):
             main.telegram_send_text(group_id, "Trigger text cannot be more than 30 symbols")
 
 
-def timeout(chat, user, payload, reply_to_message):
+def timeout(chat, user, payload):
     group_id = chat["id"]
     if chat["type"] in ("group", "supergroup") and (str(user["id"]) == CREATOR_ID or main.telegram_chat_role(group_id, user["id"]) == "creator"):
         value = int(payload.strip()) if payload.strip().isdigit() else None
@@ -251,7 +247,7 @@ def timeout(chat, user, payload, reply_to_message):
             main.telegram_send_text(group_id, "Timeout must be between 3 and 3600")
 
 
-def empty_handler(chat, user, payload, reply_to_message):
+def empty_handler(chat, user, payload):
     print("No handler for this command")
 
 
