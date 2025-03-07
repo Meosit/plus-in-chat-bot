@@ -127,8 +127,8 @@ def weight(chat, user, payload):
 
 
 # Mi ⚖️ 83.5 (BMI 25.4 ✅)
-# Last measurement: 🌭 +0.4 in 4d
-# Since beginning: 💪 -10.4 in 15d
+# > Last measurement: 🌭 +0.4 in 4d
+# > Since beginning: 💪 -10.4 in 15d
 def __user_weight_message(user):
     weights = user["weights"]
     current_weight_object = weights[0]
@@ -163,20 +163,110 @@ def __user_weight_message(user):
     return message
 
 
-def weight_rating(chat, user, payload):
+# Mi ⚖️ 83.5 (BMI 25.4 ✅)
+# > Last measurement: 🌭 +0.4 in 4d
+# > Since beginning: 💪 -10.4 in 15d
+def __user_weight_info(user):
+    weights = user["weights"]
+    current_weight_object = weights[0]
+    current_datetime = datetime.datetime.strptime(current_weight_object["d"], "%Y-%m-%d %H:%M:%S")
+    current_weight = current_weight_object["v"]
+
+    info = {}
+    info["name"] = main.escape_markdown(user['name'])
+    info["current"] = current_weight
+
+    if "weight_info" in user and "height" in user["weight_info"]:
+        current_height = (user["weight_info"]["height"] / 100.0)
+        bmi = round(current_weight / (current_height * current_height), 1)
+        info["bmi"] = bmi
+        info["height"] = user["weight_info"]["height"]
+
+    def populate_info_from_weight(weight_object, key):
+        if weight_object is None:
+            return
+        previous_datetime = datetime.datetime.strptime(weight_object["d"], "%Y-%m-%d %H:%M:%S")
+        previous_weight = weight_object["v"]
+        after = (current_datetime.date() - previous_datetime.date()).days
+        delta = current_weight - previous_weight
+        info[key] = {
+            "delta": delta,
+            "after": after
+        }
+
+    previous_weight_object = user["weights"][1] if len(user["weights"]) >= 2 else None
+    populate_info_from_weight(previous_weight_object, "last")
+
+    initial_weight_object = user["weight_info"]["initial"] if "weight_info" in user and "initial" in user["weight_info"] else None
+    populate_info_from_weight(initial_weight_object, "initial")
+    return info
+
+
+def __user_weight_info_message(weight_info):
+    if "bmi" in weight_info:
+        bmi = weight_info["bmi"]
+        icon = "🍩" if 25.0 <= bmi < 40.0 else ("⚠️" if bmi >= 40.0 else "✅")
+        bmi_text = f" (BMI `{bmi:.1f}` {icon})"
+    else:
+        bmi_text = ""
+
+    def create_delta_label(delta_info, intro):
+        if delta_info is None:
+            return f""
+        delta = delta_info["delta"]
+        delta_text = '{:+.1f}'.format(delta)
+        delta_icon = "🌭" if delta > 0 else "💪"
+        return f"\n> {intro}: {delta_icon} `{delta_text}` in {delta_info['after']}d"
+
+    previous_delta_label = create_delta_label(weight_info.get("last", None), "Last measurement")
+    initial_delta_label = create_delta_label(weight_info.get("initial", None), "Since beginning")
+
+    return f"*{weight_info['name']}* ⚖️ `{weight_info['current']:.1f}`{bmi_text}{previous_delta_label}{initial_delta_label}"
+
+
+def weight_rating(chat, user, payload, short = False):
     chat_id = str(chat["id"])
     if chat["type"] in ("group", "supergroup"):
         group = store.get_group_or_new(chat_id, chat["title"])
-        weights = list(map(lambda u: __user_weight_message(u), filter(lambda u: "weights" in u and len(u["weights"]) > 0, group["users"].values())))
-        list_rating = "No one have any weight" if len(weights) == 0 \
-            else "\n".join(f"- {it}"
-                           for it in weights)
+        user_infos = list(map(lambda u: __user_weight_info(u), filter(lambda u: "weights" in u and len(u["weights"]) > 0, group["users"].values())))
+        user_infos.sort(key=lambda u: u.get("bmi") or 99)
+        weight_messages = [__user_weight_info_message(u) for u in user_infos]
+
+        group_weight = sum(i["current"] for i in user_infos if "height" in i)
+        group_height = sum(i["height"] for i in user_infos if "height" in i)
+        group_bmi = sum(i["bmi"] for i in user_infos if "bmi" in i) / max(sum(1 for i in user_infos if "bmi" in i), 1)
+
+        group_delta = sum(i["last"]["delta"] for i in user_infos if "last" in i)
+        group_after = max(i["last"]["after"] for i in user_infos if "last" in i)
+
+        group_weight_info = {
+            "name": "ВСЯ КОНФА",
+            "current": group_weight,
+            "bmi": group_bmi,
+            "height": group_height,
+            "last": {
+                "delta": group_delta,
+                "after": group_after
+            },
+        }
+
+        if not short:
+            list_rating = "No one have any weight" if len(weight_messages) == 0 \
+                else "\n\n".join(f"{it}" for it in weight_messages)
+
+            list_rating = f"{__user_weight_info_message(group_weight_info)}\n------\n\n{list_rating}"
+        else:
+            list_rating = f"{__user_weight_info_message(group_weight_info)}"
+
         message = messages.WEIGHT_GROUP\
             .replace("[name]", main.escape_markdown(chat["title"]))\
             .replace("[date]", datetime.datetime.now().strftime("%Y-%m-%d"))\
             .replace("[list]", list_rating)
         main.telegram_send_text(chat_id, message)
 
+
+def weight_status(chat, user, payload):
+    weight_rating(chat, user, payload, True)
 
 def rating(chat, user, payload):
     chat_id = str(chat["id"])
@@ -261,6 +351,7 @@ HANDLERS = {
     "/weight": weight,
     "/weight_init": weight_init,
     "/weight_rating": weight_rating,
+    "/weight_status": weight_status,
     "/set_increase_trigger": set_increase_trigger,
     "/set_decrease_trigger": set_decrease_trigger,
 }

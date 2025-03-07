@@ -114,7 +114,7 @@ def log_error_with_notification(message):
     exc = traceback.format_exc()
     print(exc.replace("\n", " "), file=sys.stderr)
     try:
-        telegram_send_text(int(CREATOR_ID), f"{message}\n```{trim_to_max_length(escape_markdown(exc))}```")
+        telegram_send_text(int(CREATOR_ID), f"{message}\n```{trim_to_max_length(exc)}```")
     except:
         exc = traceback.format_exc().replace("\n", " ")
         print(f"Failed to notify creator: {exc}", file=sys.stderr)
