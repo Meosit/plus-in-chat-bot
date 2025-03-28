@@ -15,6 +15,11 @@ This bot is designed for [GCP Cloud Functions](https://cloud.google.com/function
 * Allow unauthenticated access
 * Memory: `128M`
 
+```shell
+gcloud functions deploy plusinchatbot-handle --runtime python310 --trigger-http --region europe-central2 --entry-point main --env-vars-file .env.yaml --memory 128Mi --gen2 --allow-unauthenticated
+```
+
+
 ### Environment variables required:
 
 * `CREATOR_ID`: id of the person who will have superuser permissions and will receive error notification in case something happened on backend
